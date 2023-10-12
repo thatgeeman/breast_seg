@@ -14,19 +14,19 @@ import torchio as tio
 
 import gc
 
+
 def pred_and_save_masks_2d(
     model,
     saved_model_path,
     dataset,
     save_masks_dir,
     n_classes,
-    num_workers = 8,
-    use_parallel = True
+    num_workers=8,
+    use_parallel=True,
 ):
-
     """
     This function performs predictions on a 2D dataset and saves the them
-    as .npy 3D volumes for use later. 
+    as .npy 3D volumes for use later.
 
     Parameters
     ----------
@@ -48,8 +48,9 @@ def pred_and_save_masks_2d(
     """
     save_masks_dir = Path(save_masks_dir)
 
-    assert os.path.isdir(save_masks_dir), \
-        "{} directory does not exist".format(save_masks_dir)
+    assert os.path.isdir(save_masks_dir), "{} directory does not exist".format(
+        save_masks_dir
+    )
 
     # Set up device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,35 +63,30 @@ def pred_and_save_masks_2d(
     model.to(device)
     model.eval()
 
-    loader = DataLoader(
-        dataset,
-        batch_size = 1, 
-        shuffle = False,
-        num_workers = num_workers
-    )
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
     # We will create a list of lists
     # Each list will be for an individual subject and have np arrays appended to it
-    # At the end we'll stack them. 
+    # At the end we'll stack them.
 
     subject_list = []
 
     for i in range(len(dataset.image_array_list)):
         subject_list.append([])
 
-    print('Predicting Masks...')
+    print("Predicting Masks...")
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
         list_index, _ = dataset.slice_indicies_dict[i]
-        
-        image = batch['image']
-        mask = batch['mask']
-        
+
+        image = batch["image"]
+        # mask = batch['mask']
+
         image = image.to(device, dtype=torch.float32)
-        mask = mask.to(device, dtype=torch.float32)
-        
+        # mask = mask.to(device, dtype=torch.float32)
+
         with torch.no_grad():
             pred = model(image)
-            
+
         if n_classes == 1:
             pred = torch.sigmoid(pred)
             pred = (pred > 0.5).float()
@@ -98,26 +94,28 @@ def pred_and_save_masks_2d(
             pred = F.softmax(pred, dim=1)
 
         pred = pred.cpu().detach().numpy()
-        
+
         subject_list[list_index].append(torch.squeeze(pred))
-    
-    print('Saving Predictions...')
+
+    print("Saving Predictions...")
     for i in range(len(subject_list)):
         mask_array = np.stack(subject_list[i], axis=-1)
 
-        np.save(save_masks_dir / '{}.npy'.format(dataset.subject_id_list[i]), mask_array)
+        np.save(
+            save_masks_dir / "{}.npy".format(dataset.subject_id_list[i]), mask_array
+        )
+
 
 def eval_2d_breast_model(
     model,
     breast_saved_model_path,
     breast_dataset,
-    batch_size, 
-    num_workers = 8,
-    use_parallel = True
+    batch_size,
+    num_workers=8,
+    use_parallel=True,
 ):
-
     """
-    This function evaluates breast predictions on a 2D dataset. 
+    This function evaluates breast predictions on a 2D dataset.
 
     Parameters
     ----------
@@ -140,10 +138,7 @@ def eval_2d_breast_model(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     breast_loader = DataLoader(
-        breast_dataset,
-        batch_size = batch_size, 
-        shuffle = False,
-        num_workers = num_workers
+        breast_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
 
     if use_parallel:
@@ -158,19 +153,19 @@ def eval_2d_breast_model(
 
     val_loss = 0
     dice_loss = 0
-    
+
     for batch in tqdm(breast_loader):
-        images = batch['image']
-        masks = batch['mask']
-        
+        images = batch["image"]
+        masks = batch["mask"]
+
         images = images.to(device, dtype=torch.float32)
         masks = masks.to(device, dtype=torch.float32)
-        
+
         with torch.no_grad():
             preds = model(images)
-            
+
         loss = criteron(preds, masks)
-        
+
         sig_preds = torch.sigmoid(preds)
         sig_preds = (sig_preds > 0.5).float()
 
@@ -179,23 +174,17 @@ def eval_2d_breast_model(
 
         val_loss += loss.item()
 
-    val_loss = val_loss/len(breast_loader)
+    val_loss = val_loss / len(breast_loader)
 
-    dice_loss = dice_loss/len(breast_loader)
-    print('Breast: Val BCE Loss: {}; Dice Coeff: {}'.format(
-        val_loss, dice_loss
-    ))
+    dice_loss = dice_loss / len(breast_loader)
+    print("Breast: Val BCE Loss: {}; Dice Coeff: {}".format(val_loss, dice_loss))
+
 
 def eval_2d_dv_model(
-    model,
-    dv_saved_model_path,
-    dv_dataset,
-    batch_size, 
-    num_workers = 8,
-    use_parallel = True
+    model, dv_saved_model_path, dv_dataset, batch_size, num_workers=8, use_parallel=True
 ):
     """
-    This function evaluates FGT and blood vessel predictions on a 2D dataset. 
+    This function evaluates FGT and blood vessel predictions on a 2D dataset.
 
     Parameters
     ----------
@@ -218,10 +207,7 @@ def eval_2d_dv_model(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dv_loader = DataLoader(
-        dv_dataset,
-        batch_size = batch_size, 
-        shuffle = False,
-        num_workers = num_workers
+        dv_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
 
     # Set up model
@@ -239,19 +225,19 @@ def eval_2d_dv_model(
     val_loss = 0
     vessel_dice_loss = 0
     dense_dice_loss = 0
-    
+
     for batch in tqdm(dv_loader):
-        images = batch['image']
-        masks = batch['mask']
-        
+        images = batch["image"]
+        masks = batch["mask"]
+
         images = images.to(device, dtype=torch.float32)
         masks = masks.to(device, dtype=torch.float32)
-        
+
         with torch.no_grad():
             preds = model(images)
-            
+
         loss = criteron(preds, masks)
-        
+
         # Lets calculate the dice score for vessels and dense
         # Softmax and then get the max value for each voxel
         # print(preds)
@@ -285,14 +271,17 @@ def eval_2d_dv_model(
 
         val_loss += loss.item()
 
-    val_loss = val_loss/len(dv_loader)
-    vessel_dice_loss = vessel_dice_loss/len(dv_loader)
-    dense_dice_loss = dense_dice_loss/len(dv_loader)
+    val_loss = val_loss / len(dv_loader)
+    vessel_dice_loss = vessel_dice_loss / len(dv_loader)
+    dense_dice_loss = dense_dice_loss / len(dv_loader)
 
-    print("""Dense/Vessels: Val CE Loss: {}
+    print(
+        """Dense/Vessels: Val CE Loss: {}
     Vessels Dice Coeff: {}; Dense Dice Coeff: {}""".format(
-        val_loss, vessel_dice_loss, dense_dice_loss
-    ))
+            val_loss, vessel_dice_loss, dense_dice_loss
+        )
+    )
+
 
 def pred_and_save_masks_3d_divided(
     unet,
@@ -300,13 +289,12 @@ def pred_and_save_masks_3d_divided(
     dataset,
     n_classes,
     save_masks_dir,
-    num_workers = 8,
-    target_subjects = None
+    num_workers=8,
+    target_subjects=None,
 ):
-
     """
     This function performs predictions on a 3D dataset using the divided
-    dataset and saves the them as .npy 3D volumes for use later. 
+    dataset and saves the them as .npy 3D volumes for use later.
 
     Parameters
     ----------
@@ -338,12 +326,7 @@ def pred_and_save_masks_3d_divided(
     unet.eval()
 
     # Dataset must be Dataset3DDividided since it spans across entire volume
-    loader = DataLoader(
-        dataset,
-        batch_size = 1, 
-        shuffle = False,
-        num_workers = num_workers
-    )
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
     # This is where it gets complicated
     # We will create a numpy array with an array at every single voxel
@@ -351,14 +334,14 @@ def pred_and_save_masks_3d_divided(
     # actual prediction values. We'll figure out where this box is within the
     # volume and fill all other voxels with np.nan. We can then concat this
     # with the initial numpy array. Eventually we'll have a bunch of guesses
-    # with np.nans in each voxel. We can then take the mean (ignoring nan) 
+    # with np.nans in each voxel. We can then take the mean (ignoring nan)
     # along the correct axis to obtain the fully estimation across the whole
-    # volume. 
+    # volume.
 
     # Due to the nature of this huge np array, it would be best to save it
-    # as we move through the subjects. It's not the cleanest, but we can 
+    # as we move through the subjects. It's not the cleanest, but we can
     # keep track of which subject we're on and when we reach the next subject,
-    # save the old array and create the new one. 
+    # save the old array and create the new one.
 
     pred_volume_list = []
 
@@ -368,15 +351,15 @@ def pred_and_save_masks_3d_divided(
     else:
         current_subject = dataset.subject_id_list[0]
 
-    print('Predicting Masks...')
+    print("Predicting Masks...")
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
-        
         list_index, box_index = dataset.box_indicies_dict[i]
 
-        # Continue if 
-        if target_subjects != None and \
-            not dataset.subject_id_list[list_index] in target_subjects:
-            
+        # Continue if
+        if (
+            target_subjects != None
+            and not dataset.subject_id_list[list_index] in target_subjects
+        ):
             continue
 
         # If we have moved onto the next subject, we need to save and reinitialize
@@ -386,15 +369,15 @@ def pred_and_save_masks_3d_divided(
             volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
             volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
             # Verify that there are no nans left in the array anymore
-            assert np.isnan(np.min(volume_pred_array)) == False, \
-                '{} still contains nan values when trying to save'.format(
-                    current_subject
-                )
+            assert (
+                np.isnan(np.min(volume_pred_array)) == False
+            ), "{} still contains nan values when trying to save".format(
+                current_subject
+            )
 
             # Save the array; we'll keep the raw values
             np.save(
-                save_masks_dir / '{}.npy'.format(current_subject), 
-                volume_pred_array
+                save_masks_dir / "{}.npy".format(current_subject), volume_pred_array
             )
 
             del pred_volume_list
@@ -404,11 +387,11 @@ def pred_and_save_masks_3d_divided(
             # print(current_subject, dataset.subject_id_list[list_index])
 
             # Now we can change the subject and create a new array
-            current_subject = dataset.subject_id_list[list_index] 
+            current_subject = dataset.subject_id_list[list_index]
             pred_volume_list = []
 
         x_index, y_index, z_index = box_index
-        
+
         # Debugging
         # print('{}\t{}:{}\t{}:{}\t{}:{}'.format(
         #     i,
@@ -418,7 +401,7 @@ def pred_and_save_masks_3d_divided(
         # ))
 
         # Get preds
-        image = batch['image']
+        image = batch["image"]
         # mask = batch['mask']
 
         image = image.to(device, dtype=torch.float32)
@@ -448,9 +431,9 @@ def pred_and_save_masks_3d_divided(
             current_pred_array[:] = np.nan
 
             current_pred_array[
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                x_index : x_index + dataset.input_dim,
+                y_index : y_index + dataset.input_dim,
+                z_index : z_index + dataset.input_dim,
             ] = pred
         else:
             current_pred_array = np.empty(
@@ -459,10 +442,10 @@ def pred_and_save_masks_3d_divided(
             current_pred_array[:] = np.nan
 
             current_pred_array[
-                :, 
-                x_index:x_index + dataset.input_dim,
-                y_index:y_index + dataset.input_dim,
-                z_index:z_index + dataset.input_dim
+                :,
+                x_index : x_index + dataset.input_dim,
+                y_index : y_index + dataset.input_dim,
+                z_index : z_index + dataset.input_dim,
             ] = pred
 
         # print(pred.dtype)
@@ -474,17 +457,13 @@ def pred_and_save_masks_3d_divided(
     volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
     volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
     # Verify that there are no nans left in the array anymore
-    assert np.isnan(np.min(volume_pred_array)) == False, \
-        '{} still contains nan values when trying to save'.format(
-            current_subject
-        )
+    assert (
+        np.isnan(np.min(volume_pred_array)) == False
+    ), "{} still contains nan values when trying to save".format(current_subject)
 
     # Save the array; we'll keep the raw values
-    np.save(
-        save_masks_dir / '{}.npy'.format(current_subject), 
-        volume_pred_array
-    )
-    
+    np.save(save_masks_dir / "{}.npy".format(current_subject), volume_pred_array)
+
 
 def pred_and_save_masks_3d_stacked(
     saved_model_path,
@@ -493,13 +472,12 @@ def pred_and_save_masks_3d_stacked(
     n_classes,
     n_channels,
     save_masks_dir,
-    num_workers = 8,
-    target_subjects = None
+    num_workers=8,
+    target_subjects=None,
 ):
-
     """
     This function performs predictions on a 3D dataset using the stacked
-    dataset and saves the them as .npy 3D volumes for use later. 
+    dataset and saves the them as .npy 3D volumes for use later.
 
     Parameters
     ----------
@@ -520,8 +498,9 @@ def pred_and_save_masks_3d_stacked(
 
     """
     save_masks_dir = Path(save_masks_dir)
-    assert os.path.isdir(save_masks_dir), \
-        "{} directory does not exist".format(save_masks_dir)
+    assert os.path.isdir(save_masks_dir), "{} directory does not exist".format(
+        save_masks_dir
+    )
 
     # Set up device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -533,12 +512,7 @@ def pred_and_save_masks_3d_stacked(
     unet.eval()
 
     # Dataset must be Dataset3DStacked since it spans across entire volume
-    loader = DataLoader(
-        dataset,
-        batch_size = 1, 
-        shuffle = False,
-        num_workers = num_workers
-    )
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
     # This is where it gets complicated
     # We will create a numpy array with an array at every single voxel
@@ -546,14 +520,14 @@ def pred_and_save_masks_3d_stacked(
     # actual prediction values. We'll figure out where this box is within the
     # volume and fill all other voxels with np.nan. We can then concat this
     # with the initial numpy array. Eventually we'll have a bunch of guesses
-    # with np.nans in each voxel. We can then take the mean (ignoring nan) 
+    # with np.nans in each voxel. We can then take the mean (ignoring nan)
     # along the correct axis to obtain the fully estimation across the whole
-    # volume. 
+    # volume.
 
     # Due to the nature of this huge np array, it would be best to save it
-    # as we move through the subjects. It's not the cleanest, but we can 
+    # as we move through the subjects. It's not the cleanest, but we can
     # keep track of which subject we're on and when we reach the next subject,
-    # save the old array and create the new one. 
+    # save the old array and create the new one.
 
     pred_volume_list = []
 
@@ -563,17 +537,17 @@ def pred_and_save_masks_3d_stacked(
     else:
         current_subject = dataset.subject_id_list[0]
 
-    print('Predicting Masks...')
+    print("Predicting Masks...")
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
-
         list_index, z_index = dataset.box_indicies_dict[i]
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_shape_list[list_index]
 
-        # Continue if 
-        if target_subjects != None and \
-            not dataset.subject_id_list[list_index] in target_subjects:
-            
+        # Continue if
+        if (
+            target_subjects != None
+            and not dataset.subject_id_list[list_index] in target_subjects
+        ):
             continue
 
         # If we have moved onto the next subject, we need to save and reinitialize
@@ -583,15 +557,15 @@ def pred_and_save_masks_3d_stacked(
             volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
             volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
             # Verify that there are no nans left in the array anymore
-            assert np.isnan(np.min(volume_pred_array)) == False, \
-                '{} still contains nan values when trying to save'.format(
-                    current_subject
-                )
+            assert (
+                np.isnan(np.min(volume_pred_array)) == False
+            ), "{} still contains nan values when trying to save".format(
+                current_subject
+            )
 
             # Save the array; we'll keep the raw values
             np.save(
-                save_masks_dir / '{}.npy'.format(current_subject), 
-                volume_pred_array
+                save_masks_dir / "{}.npy".format(current_subject), volume_pred_array
             )
 
             del pred_volume_list
@@ -601,12 +575,12 @@ def pred_and_save_masks_3d_stacked(
             # print(current_subject, dataset.subject_id_list[list_index])
 
             # Now we can change the subject and create a new array
-            current_subject = dataset.subject_id_list[list_index] 
+            current_subject = dataset.subject_id_list[list_index]
             pred_volume_list = []
 
         # Get preds
-        image = batch['image']
-        mask = batch['mask']
+        image = batch["image"]
+        mask = batch["mask"]
 
         image = image.to(device, dtype=torch.float32)
         mask = mask.to(device, dtype=torch.float32)
@@ -623,7 +597,7 @@ def pred_and_save_masks_3d_stacked(
         pred = torch.squeeze(pred, dim=0)
 
         resize_transform = tio.Resize((x_length, y_length, dataset.z_input_dim))
-    
+
         # Turn into numpy array and fix dims
         pred = pred.cpu().detach().numpy()
         pred = resize_transform(pred)
@@ -637,30 +611,21 @@ def pred_and_save_masks_3d_stacked(
         #     y_index, y_index + dataset.input_dim,
         #     z_index, z_index + dataset.input_dim
         # ))
-    
+
         if n_classes == 1:
             current_pred_array = np.empty(
                 (x_length, y_length, z_length, 1), dtype=np.half
             )
             current_pred_array[:] = np.nan
 
-            current_pred_array[
-                :,
-                :,
-                z_index:z_index + dataset.z_input_dim
-            ] = pred
+            current_pred_array[:, :, z_index : z_index + dataset.z_input_dim] = pred
         else:
             current_pred_array = np.empty(
                 (n_classes, x_length, y_length, z_length, 1), dtype=np.half
             )
             current_pred_array[:] = np.nan
 
-            current_pred_array[
-                :, 
-                :,
-                :,
-                z_index:z_index + dataset.z_input_dim
-            ] = pred
+            current_pred_array[:, :, :, z_index : z_index + dataset.z_input_dim] = pred
 
         # print(pred.dtype)
 
@@ -671,16 +636,13 @@ def pred_and_save_masks_3d_stacked(
     volume_pred_array = np.concatenate(pred_volume_list, axis=-1)
     volume_pred_array = np.nanmean(volume_pred_array, axis=-1)
     # Verify that there are no nans left in the array anymore
-    assert np.isnan(np.min(volume_pred_array)) == False, \
-        '{} still contains nan values when trying to save'.format(
-            current_subject
-        )
+    assert (
+        np.isnan(np.min(volume_pred_array)) == False
+    ), "{} still contains nan values when trying to save".format(current_subject)
 
     # Save the array; we'll keep the raw values
-    np.save(
-        save_masks_dir / '{}.npy'.format(current_subject), 
-        volume_pred_array
-    )
+    np.save(save_masks_dir / "{}.npy".format(current_subject), volume_pred_array)
+
 
 def pred_and_save_masks_3d_simple(
     saved_model_path,
@@ -689,12 +651,11 @@ def pred_and_save_masks_3d_simple(
     n_classes,
     n_channels,
     save_masks_dir,
-    num_workers = 8
+    num_workers=8,
 ):
-
     """
     This function performs predictions on a 3D dataset using the simple
-    dataset and saves the them as .npy 3D volumes for use later. 
+    dataset and saves the them as .npy 3D volumes for use later.
 
     Parameters
     ----------
@@ -715,8 +676,9 @@ def pred_and_save_masks_3d_simple(
 
     """
     save_masks_dir = Path(save_masks_dir)
-    assert os.path.isdir(save_masks_dir), \
-        "{} directory does not exist".format(save_masks_dir)
+    assert os.path.isdir(save_masks_dir), "{} directory does not exist".format(
+        save_masks_dir
+    )
 
     # Set up device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -728,26 +690,20 @@ def pred_and_save_masks_3d_simple(
     unet.eval()
 
     # Dataset must be Dataset3DSimple since it spans across entire volume
-    loader = DataLoader(
-        dataset,
-        batch_size = 1, 
-        shuffle = False,
-        num_workers = num_workers
-    )
+    loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=num_workers)
 
-    print('Predicting Masks...')
+    print("Predicting Masks...")
     for i, batch in tqdm(enumerate(loader), total=len(loader)):
-
         current_subject = dataset.subject_id_list[i]
         # Make an empty array that will be filled in the correct area with preds
         x_length, y_length, z_length = dataset.image_shape_list[i]
 
         # Get preds
-        image = batch['image']
-        mask = batch['mask']
+        image = batch["image"]
+        # mask = batch["mask"]
 
         image = image.to(device, dtype=torch.float32)
-        mask = mask.to(device, dtype=torch.float32)
+        # mask = mask.to(device, dtype=torch.float32)
 
         with torch.no_grad():
             pred = unet(image)
@@ -761,27 +717,20 @@ def pred_and_save_masks_3d_simple(
         pred = torch.squeeze(pred, dim=0)
 
         resize_transform = tio.Resize((x_length, y_length, z_length))
-    
+
         # Turn into numpy array and fix dims
         pred = pred.cpu().detach().numpy()
         pred = resize_transform(pred)
         pred = np.squeeze(pred).astype(np.half)
 
         # Save the array; we'll keep the raw values
-        np.save(
-            save_masks_dir / '{}.npy'.format(current_subject), 
-            pred
-        )
+        np.save(save_masks_dir / "{}.npy".format(current_subject), pred)
 
         del pred
         gc.collect()
 
 
-def eval_3d_volumes_breast(
-    true_mask_dir,
-    saved_preds_dir
-):
-
+def eval_3d_volumes_breast(true_mask_dir, saved_preds_dir):
     """
     Calculates BCE and DSC score for breast predictions on saved segemtations.
 
@@ -797,11 +746,11 @@ def eval_3d_volumes_breast(
     saved_preds_dir = Path(saved_preds_dir)
 
     # First make sure that we have an equal number of volumes in each dir
-    subject_file_list = sorted([x for x in os.listdir(true_mask_dir) if '.npy' in x])
+    subject_file_list = sorted([x for x in os.listdir(true_mask_dir) if ".npy" in x])
 
     assert subject_file_list == sorted(
-        [x for x in os.listdir(saved_preds_dir) if '.npy' in x]
-        ), "Mismatch between subjects in true mask dir and pred mask dir"
+        [x for x in os.listdir(saved_preds_dir) if ".npy" in x]
+    ), "Mismatch between subjects in true mask dir and pred mask dir"
 
     # Now we can iterate through each subject
     # Sigmoid already applied so no logits needed
@@ -820,14 +769,12 @@ def eval_3d_volumes_breast(
         if not pred_mask.is_contiguous():
             pred_mask = pred_mask.contiguous()
 
-        assert true_mask.shape == pred_mask.shape, \
-            """Subject: {}
-            True mask and predict mask shape do not match: {}, {}"""\
-                .format(
-                    subject_file,
-                    true_mask.shape, 
-                    pred_mask.shape
-                )
+        assert (
+            true_mask.shape == pred_mask.shape
+        ), """Subject: {}
+            True mask and predict mask shape do not match: {}, {}""".format(
+            subject_file, true_mask.shape, pred_mask.shape
+        )
 
         loss = criteron(pred_mask, true_mask)
 
@@ -839,21 +786,14 @@ def eval_3d_volumes_breast(
 
         val_loss += loss.item()
 
-    val_loss = val_loss/len(subject_file_list)
-    dice_loss = dice_loss/len(subject_file_list)
-    print('Breast: Val BCE Loss: {}; Dice Coeff: {}'.format(
-        val_loss, dice_loss
-    ))
+    val_loss = val_loss / len(subject_file_list)
+    dice_loss = dice_loss / len(subject_file_list)
+    print("Breast: Val BCE Loss: {}; Dice Coeff: {}".format(val_loss, dice_loss))
 
 
-
-def eval_3d_volumes_dv(
-    true_mask_dir,
-    saved_preds_dir
-):
-
+def eval_3d_volumes_dv(true_mask_dir, saved_preds_dir):
     """
-    Calculates BCE and DSC score for FGT and blood vessel predictions on 
+    Calculates BCE and DSC score for FGT and blood vessel predictions on
     saved segemtations.
 
     Parameters
@@ -868,11 +808,11 @@ def eval_3d_volumes_dv(
     saved_preds_dir = Path(saved_preds_dir)
 
     # First make sure that we have an equal number of volumes in each dir
-    subject_file_list = sorted([x for x in os.listdir(true_mask_dir) if '.npy' in x])
+    subject_file_list = sorted([x for x in os.listdir(true_mask_dir) if ".npy" in x])
 
     assert subject_file_list == sorted(
-        [x for x in os.listdir(saved_preds_dir) if '.npy' in x]
-        ), "Mismatch between subjects in true mask dir and pred mask dir"
+        [x for x in os.listdir(saved_preds_dir) if ".npy" in x]
+    ), "Mismatch between subjects in true mask dir and pred mask dir"
 
     # Track losses and scores
     criteron = nn.CrossEntropyLoss()
@@ -880,8 +820,8 @@ def eval_3d_volumes_dv(
     val_loss = 0
     vessel_dice_loss = 0
     dense_dice_loss = 0
-    
-     # Now we can iterate through each subject
+
+    # Now we can iterate through each subject
     for subject_file in tqdm(subject_file_list):
         true_mask = np.load(true_mask_dir / subject_file)
         pred_mask = np.load(saved_preds_dir / subject_file)
@@ -892,14 +832,12 @@ def eval_3d_volumes_dv(
         true_mask = F.one_hot(true_mask.long(), 3)
         true_mask = torch.permute(true_mask, (3, 0, 1, 2)).float()
 
-        assert true_mask.shape == pred_mask.shape, \
-            """Subject: {}
-            True mask and predict mask shape do not match: {}, {}"""\
-                .format(
-                    subject_file,
-                    true_mask.shape, 
-                    pred_mask.shape
-                )
+        assert (
+            true_mask.shape == pred_mask.shape
+        ), """Subject: {}
+            True mask and predict mask shape do not match: {}, {}""".format(
+            subject_file, true_mask.shape, pred_mask.shape
+        )
 
         # Get CE loss
         loss = criteron(pred_mask, true_mask)
@@ -935,12 +873,13 @@ def eval_3d_volumes_dv(
 
         val_loss += loss.item()
 
-    val_loss = val_loss/len(subject_file_list)
-    vessel_dice_loss = vessel_dice_loss/len(subject_file_list)
-    dense_dice_loss = dense_dice_loss/len(subject_file_list)
+    val_loss = val_loss / len(subject_file_list)
+    vessel_dice_loss = vessel_dice_loss / len(subject_file_list)
+    dense_dice_loss = dense_dice_loss / len(subject_file_list)
 
-    print("""Dense/Vessels: Val CE Loss: {}
+    print(
+        """Dense/Vessels: Val CE Loss: {}
     Vessels Dice Coeff: {}; Dense Dice Coeff: {}""".format(
-        val_loss, vessel_dice_loss, dense_dice_loss
-    ))
-    
+            val_loss, vessel_dice_loss, dense_dice_loss
+        )
+    )
